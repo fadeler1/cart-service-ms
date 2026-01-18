@@ -40,6 +40,12 @@ Esta carpeta contiene los diagramas de secuencia para cada endpoint del servicio
 - **Descripción**: Elimina un producto del carrito completamente
 - **Autenticación**: JWT requerido
 
+### 7. Fusionar Carrito de Invitado
+📄 [sequence-diagram-merge-cart.md](./sequence-diagram-merge-cart.md)
+- **Endpoint**: `POST /cart/merge`
+- **Descripción**: Fusiona el carrito de invitado con el carrito del usuario registrado
+- **Autenticación**: JWT requerido (solo usuarios registrados)
+
 ## Formato de los Diagramas
 
 Los diagramas están en formato **Mermaid**, que es renderizado automáticamente por:

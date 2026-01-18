@@ -9,6 +9,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -26,6 +27,7 @@ import { CurrentUser } from '../auth/decorators/user.decorator';
 import type { JwtPayload } from '../common/interfaces/jwt-payload.interface';
 import { AddItemDto } from './dto/add-item.dto';
 import { UpdateItemDto } from './dto/update-item.dto';
+import { MergeCartDto } from './dto/merge-cart.dto';
 import { CartResponseDto } from './dto/cart-response.dto';
 
 @ApiTags('cart')
@@ -57,6 +59,47 @@ export class CartController {
   })
   async getCart(@CurrentUser() user: JwtPayload): Promise<CartResponseDto> {
     const cart = await this.cartManagerService.getOrCreateCart(user);
+    return this.cartManagerService.formatCartResponse(cart);
+  }
+
+  @Post('merge')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Fusionar carrito de invitado con carrito de usuario',
+    description:
+      'Fusiona el carrito de un usuario invitado con el carrito del usuario registrado. Si hay productos duplicados, se suman las cantidades. El carrito de invitado se elimina después de la fusión.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Carritos fusionados exitosamente',
+    type: CartResponseDto,
+  })
+  @ApiUnauthorizedResponse({ description: 'Token JWT inválido o faltante' })
+  @ApiBadRequestResponse({
+    description: 'El usuario debe estar registrado o datos inválidos',
+    schema: {
+      example: {
+        statusCode: 400,
+        message: 'Este endpoint solo está disponible para usuarios registrados',
+      },
+    },
+  })
+  async mergeGuestCart(
+    @Body() mergeCartDto: MergeCartDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<CartResponseDto> {
+    // Verificar que el usuario esté registrado
+    if (user.type === 'guest') {
+      throw new BadRequestException(
+        'Este endpoint solo está disponible para usuarios registrados',
+      );
+    }
+
+    const cart = await this.cartManagerService.mergeGuestCartIntoUserCart(
+      user.sub,
+      mergeCartDto.guestSessionId,
+    );
+
     return this.cartManagerService.formatCartResponse(cart);
   }
 

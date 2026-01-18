@@ -89,12 +89,26 @@ export class MongoDBCartRepository implements ICartRepository {
   }
 
   async findByGuestId(guestId: string): Promise<CartInterface | null> {
+    // Buscar por guestSessionId exacto
     const cartDoc = await this.cartModel
       .findOne({
         guestSessionId: guestId,
         status: 'active',
       })
       .exec();
+
+    // Si no se encuentra, intentar sin el filtro de status (por si acaso)
+    if (!cartDoc) {
+      const cartDocWithoutStatus = await this.cartModel
+        .findOne({
+          guestSessionId: guestId,
+        })
+        .exec();
+      
+      if (cartDocWithoutStatus) {
+        return this.toCartInterface(cartDocWithoutStatus, CartUserType.GUEST);
+      }
+    }
 
     return cartDoc ? this.toCartInterface(cartDoc, CartUserType.GUEST) : null;
   }

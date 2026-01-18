@@ -1,14 +1,18 @@
 import { Injectable, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
 import type { ICartRepository } from '../repositories/cart.repository.interface';
 import { Cart, CartItem, CartUserType, CartResponse } from '../../common/interfaces/cart.interface';
 import { JwtPayload } from '../../common/interfaces/jwt-payload.interface';
 import { AddItemDto } from '../dto/add-item.dto';
 import { UpdateItemDto } from '../dto/update-item.dto';
+import { GuestSession, GuestSessionDocument } from '../schemas/guest-session.schema';
 
 @Injectable()
 export class CartManagerService {
   constructor(
     @Inject('ICartRepository') private readonly cartRepository: ICartRepository,
+    @InjectModel(GuestSession.name) private guestSessionModel: Model<GuestSessionDocument>,
   ) {}
 
   async getOrCreateCart(user: JwtPayload): Promise<Cart> {
@@ -109,6 +113,70 @@ export class CartManagerService {
     cart.items.splice(itemIndex, 1);
 
     return await this.cartRepository.update(cart);
+  }
+
+  async mergeGuestCartIntoUserCart(
+    userId: string,
+    guestSessionId: string,
+  ): Promise<Cart> {
+    // Buscar carrito de invitado
+    const guestCart = await this.cartRepository.findByGuestId(guestSessionId);
+    
+    // Si no se encuentra, lanzar excepción informativa
+    if (!guestCart) {
+      throw new NotFoundException(
+        `Carrito de invitado con guestSessionId ${guestSessionId} no encontrado`,
+      );
+    }
+
+    // Buscar o crear carrito del usuario registrado
+    let userCart = await this.cartRepository.findByUserId(userId);
+
+    if (!userCart) {
+      // Si no existe carrito del usuario, crear uno nuevo
+      userCart = await this.cartRepository.create(userId, null, CartUserType.REGISTERED);
+    }
+
+    // Si existe carrito de invitado con items, fusionar
+    if (guestCart && guestCart.items.length > 0) {
+      // Crear un mapa para fusionar items por productId
+      const itemsMap = new Map<string, CartItem>();
+
+      // Agregar items del carrito del usuario al mapa
+      userCart.items.forEach((item) => {
+        itemsMap.set(item.productId, { ...item });
+      });
+
+      // Fusionar items del carrito de invitado
+      guestCart.items.forEach((guestItem) => {
+        const existingItem = itemsMap.get(guestItem.productId);
+
+        if (existingItem) {
+          // Si el producto ya existe, sumar las cantidades
+          existingItem.quantity += guestItem.quantity;
+        } else {
+          // Si es un producto nuevo, agregarlo
+          itemsMap.set(guestItem.productId, { ...guestItem });
+        }
+      });
+
+      // Convertir el mapa de vuelta a array
+      userCart.items = Array.from(itemsMap.values());
+
+      // Actualizar el carrito del usuario con los items fusionados
+      userCart = await this.cartRepository.update(userCart);
+
+      // Eliminar el carrito de invitado después de la fusión
+      await this.cartRepository.delete(guestCart.id);
+    } else if (guestCart) {
+      // Si el carrito de invitado existe pero está vacío, solo eliminarlo
+      await this.cartRepository.delete(guestCart.id);
+    }
+
+    // Eliminar la sesión de invitado de GUEST_SESSIONS
+    await this.guestSessionModel.deleteOne({ sessionId: guestSessionId }).exec();
+
+    return userCart;
   }
 
   formatCartResponse(cart: Cart): CartResponse {
