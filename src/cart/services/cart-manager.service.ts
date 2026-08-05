@@ -60,8 +60,15 @@ export class CartManagerService {
     return cart;
   }
 
+  private assertCartMutable(cart: Cart): void {
+    if (cart.status === 'completed') {
+      throw new BadRequestException('El carrito ya fue completado y no se puede modificar');
+    }
+  }
+
   async addItemToCart(cartId: string, user: JwtPayload, addItemDto: AddItemDto): Promise<Cart> {
     const cart = await this.getCartById(cartId, user);
+    this.assertCartMutable(cart);
 
     const existingItemIndex = cart.items.findIndex(
       (item) => item.productId === addItemDto.productId,
@@ -87,6 +94,7 @@ export class CartManagerService {
     updateItemDto: UpdateItemDto,
   ): Promise<Cart> {
     const cart = await this.getCartById(cartId, user);
+    this.assertCartMutable(cart);
 
     const itemIndex = cart.items.findIndex((item) => item.productId === updateItemDto.productId);
 
@@ -103,6 +111,7 @@ export class CartManagerService {
 
   async removeItemFromCart(cartId: string, user: JwtPayload, productId: string): Promise<Cart> {
     const cart = await this.getCartById(cartId, user);
+    this.assertCartMutable(cart);
 
     const itemIndex = cart.items.findIndex((item) => item.productId === productId);
 
@@ -177,6 +186,26 @@ export class CartManagerService {
     await this.guestSessionModel.deleteOne({ sessionId: guestSessionId }).exec();
 
     return userCart;
+  }
+
+  /**
+   * Marca el carrito como completed y crea uno nuevo vacío (active) para el usuario.
+   */
+  async completeCartAndCreateNew(cartId: string, user: JwtPayload): Promise<Cart> {
+    const cart = await this.getCartById(cartId, user);
+
+    if (cart.status === 'completed') {
+      // Idempotente: si ya estaba cerrado, devolver/crear el active actual
+      return this.getOrCreateCart(user);
+    }
+
+    await this.cartRepository.updateStatus(cart.id, 'completed');
+
+    const userType = user.type === 'guest' ? CartUserType.GUEST : CartUserType.REGISTERED;
+    const userId = userType === CartUserType.REGISTERED ? user.sub : null;
+    const guestId = userType === CartUserType.GUEST ? user.sub : null;
+
+    return this.cartRepository.create(userId, guestId, userType);
   }
 
   formatCartResponse(cart: Cart): CartResponse {

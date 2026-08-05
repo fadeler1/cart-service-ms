@@ -29,6 +29,7 @@ export class MongoDBCartRepository implements ICartRepository {
       guestId: determinedUserType === CartUserType.GUEST ? cartDoc.guestSessionId : undefined,
       userType: determinedUserType,
       items: cartDoc.items || [],
+      status: (cartDoc.status as CartInterface['status']) || 'active',
       createdAt: cartDoc.createdAt || new Date(),
       updatedAt: cartDoc.updatedAt || new Date(),
     };
@@ -89,26 +90,12 @@ export class MongoDBCartRepository implements ICartRepository {
   }
 
   async findByGuestId(guestId: string): Promise<CartInterface | null> {
-    // Buscar por guestSessionId exacto
     const cartDoc = await this.cartModel
       .findOne({
         guestSessionId: guestId,
         status: 'active',
       })
       .exec();
-
-    // Si no se encuentra, intentar sin el filtro de status (por si acaso)
-    if (!cartDoc) {
-      const cartDocWithoutStatus = await this.cartModel
-        .findOne({
-          guestSessionId: guestId,
-        })
-        .exec();
-      
-      if (cartDocWithoutStatus) {
-        return this.toCartInterface(cartDocWithoutStatus, CartUserType.GUEST);
-      }
-    }
 
     return cartDoc ? this.toCartInterface(cartDoc, CartUserType.GUEST) : null;
   }
@@ -119,7 +106,7 @@ export class MongoDBCartRepository implements ICartRepository {
     // Mapear de vuelta a la estructura de MongoDB según el tipo de usuario
     const updateDataMongo: any = {
       items: cart.items,
-      status: 'active', // Mantener status activo
+      status: cart.status || 'active',
       updatedAt: new Date(),
     };
 
@@ -150,6 +137,16 @@ export class MongoDBCartRepository implements ICartRepository {
     }
 
     return this.toCartInterface(cartDoc, userType);
+  }
+
+  async updateStatus(cartId: string, status: 'active' | 'completed'): Promise<void> {
+    const result = await this.cartModel
+      .findByIdAndUpdate(cartId, { status, updatedAt: new Date() }, { new: true })
+      .exec();
+
+    if (!result) {
+      throw new Error(`Cart with id ${cartId} not found`);
+    }
   }
 
   async delete(cartId: string): Promise<void> {

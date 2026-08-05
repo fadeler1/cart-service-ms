@@ -103,6 +103,35 @@ export class CartController {
     return this.cartManagerService.formatCartResponse(cart);
   }
 
+  @Post(':cartId/complete')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Completar carrito tras pago',
+    description:
+      'Marca el carrito actual como completed y crea un carrito vacío nuevo (active) para el usuario.',
+  })
+  @ApiParam({
+    name: 'cartId',
+    description: 'Identificador único del carrito a completar',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Carrito completado y nuevo carrito creado',
+    type: CartResponseDto,
+  })
+  @ApiUnauthorizedResponse({ description: 'Token JWT inválido o faltante' })
+  @ApiNotFoundResponse({ description: 'Carrito no encontrado' })
+  @ApiBadRequestResponse({
+    description: 'Carrito no pertenece al usuario',
+  })
+  async completeCart(
+    @Param('cartId') cartId: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<CartResponseDto> {
+    const cart = await this.cartManagerService.completeCartAndCreateNew(cartId, user);
+    return this.cartManagerService.formatCartResponse(cart);
+  }
+
   @Get(':cartId')
   @ApiOperation({
     summary: 'Obtener carrito por ID',

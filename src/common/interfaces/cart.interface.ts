@@ -3,6 +3,8 @@ export enum CartUserType {
   GUEST = 'guest',
 }
 
+export type CartStatus = 'active' | 'completed';
+
 export interface CartItem {
   productId: string;
   quantity: number;
@@ -16,6 +18,7 @@ export interface Cart {
   guestId?: string;
   userType: CartUserType;
   items: CartItem[];
+  status?: CartStatus;
   createdAt: Date;
   updatedAt: Date;
 }

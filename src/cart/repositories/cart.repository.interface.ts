@@ -6,5 +6,6 @@ export interface ICartRepository {
   findByUserId(userId: string): Promise<Cart | null>;
   findByGuestId(guestId: string): Promise<Cart | null>;
   update(cart: Cart): Promise<Cart>;
+  updateStatus(cartId: string, status: 'active' | 'completed'): Promise<void>;
   delete(cartId: string): Promise<void>;
 }
